@@ -1,3 +1,4 @@
+# --- Розділ 1: Імпорти ---
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -6,8 +7,10 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+# ↓↓↓ ОСЬ НОВИЙ ІМПОРТ ↓↓↓
+from aiogram.client.default import DefaultBotProperties
 
-# Імпортуємо наші нові функції
+# Імпортуємо наші функції для AI
 from prompt_logic import build_social_prompt, call_llm
 
 # --- Розділ 2: Конфігурація та ініціалізація ---
@@ -17,7 +20,8 @@ BASE_WEBHOOK_URL = "https://stroyhub-bot.onrender.com"
 WEBHOOK_PATH = "/webhook"
 
 app = FastAPI()
-bot = Bot(token=TELEGRAM_TOKEN, parse_mode="Markdown")
+# ↓↓↓ ОСЬ ОНОВЛЕНИЙ РЯДОК ІНІЦІАЛІЗАЦІЇ БОТА ↓↓↓
+bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp = Dispatcher()
 
 # --- Розділ 3: Налаштування візарда та станів (FSM) ---
@@ -42,7 +46,6 @@ class Form(StatesGroup):
 
 # --- Розділ 4: Допоміжні функції ---
 async def ask_question(message: types.Message, state: FSMContext):
-    """Надсилає поточне питання візарда."""
     data = await state.get_data()
     current_step_index = data.get("current_step_index", 0)
 
@@ -64,7 +67,6 @@ async def ask_question(message: types.Message, state: FSMContext):
     await message.answer(step['question'], reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
 async def finish_wizard(message: types.Message, state: FSMContext):
-    """Завершує візард, показує звіт та запускає генерацію."""
     data = await state.get_data()
     await state.clear()
 
@@ -76,13 +78,9 @@ async def finish_wizard(message: types.Message, state: FSMContext):
     await message.answer(summary)
     await message.answer("⏳ *Генерую допис...* Будь ласка, зачекайте. Це може зайняти до хвилини.", reply_markup=ReplyKeyboardRemove())
 
-    # --- ІНТЕГРАЦІЯ РЕАЛЬНОЇ ГЕНЕРАЦІЇ ---
     try:
-        # 1. Будуємо промпт на основі зібраних даних
         system_prompt, user_prompt = build_social_prompt(data)
-        # 2. Викликаємо мовну модель
         result = call_llm(system_prompt, user_prompt)
-        # 3. Надсилаємо результат
         await message.answer(result)
     except Exception as e:
         await message.answer(f"❌ Під час генерації сталася помилка: {e}")
@@ -91,7 +89,6 @@ async def finish_wizard(message: types.Message, state: FSMContext):
 @dp.message(CommandStart())
 @dp.message(Command("newpost"))
 async def command_start_handler(message: types.Message, state: FSMContext):
-    """Починає діалог та запускає візард."""
     await state.clear()
     await state.set_data({"current_step_index": 0})
     await state.set_state(Form.in_wizard)
@@ -100,7 +97,6 @@ async def command_start_handler(message: types.Message, state: FSMContext):
 
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
-    """Дозволяє користувачу скасувати дію в будь-який момент."""
     current_state = await state.get_state()
     if current_state is None:
         return
@@ -162,3 +158,5 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     await bot.delete_webhook()
+
+    
