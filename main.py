@@ -7,7 +7,6 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-# ↓↓↓ ОНОВЛЕНІ ІМПОРТИ для клавіатур ↓↓↓
 from aiogram.types import (
     InlineKeyboardButton, InlineKeyboardMarkup, 
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
@@ -44,7 +43,6 @@ WIZARD_STEPS = [
   { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
 ]
 
-# Створюємо назву для нашої постійної кнопки
 MAIN_BUTTON_TEXT = "📝 Написати новий допис"
 
 class Form(StatesGroup):
@@ -102,14 +100,12 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
         await message.answer("Спробувати згенерувати ще раз?", reply_markup=final_keyboard)
 
 # --- Розділ 5: Обробники команд та дій ---
-# ↓↓↓ ОНОВЛЕНО: Тепер обробляємо і текст кнопки ↓↓↓
 @dp.message(F.text.in_({"/start", "/newpost", MAIN_BUTTON_TEXT}))
 async def command_start_handler(message: types.Message, state: FSMContext):
     """Починає діалог та запускає візард."""
     await state.clear()
     await state.set_data({"current_step_index": 0})
     await state.set_state(Form.in_wizard)
-    # Прибираємо постійну клавіатуру на час візарда
     await message.answer("👋 Вітаю! Давайте створимо допис.", reply_markup=ReplyKeyboardRemove())
     await ask_question(message, state)
 
@@ -121,7 +117,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
         return
     await state.clear()
     await message.answer("Дію скасовано.")
-    await send_main_menu(message) # Показуємо головне меню з кнопкою
+    await send_main_menu(message)
 
 @dp.message(Form.in_wizard, F.text)
 async def process_text_answer(message: types.Message, state: FSMContext):
@@ -183,7 +179,6 @@ async def on_shutdown():
     await bot.delete_webhook()
 
 # --- Розділ 7: Головне меню ---
-# ↓↓↓ НОВА ФУНКЦІЯ для показу головного меню ↓↓↓
 async def send_main_menu(message: types.Message):
     """Надсилає головне меню з постійною кнопкою внизу."""
     keyboard = ReplyKeyboardMarkup(
@@ -192,7 +187,7 @@ async def send_main_menu(message: types.Message):
     )
     await message.answer("Щоб створити новий допис, натисніть кнопку внизу або введіть /newpost.", reply_markup=keyboard)
 
-# Цей обробник потрібен, щоб бот не відповідав "Невідома команда" на інші повідомлення
-@dp.message()
-async def echo_handler(message: types.Message):
-    await send_main_menu(message)
+# --- ВИДАЛЕНО КОНФЛІКТНИЙ ОБРОБНИК ---
+# @dp.message()
+# async def echo_handler(message: types.Message):
+#     await send_main_menu(message)
