@@ -1,4 +1,3 @@
-# --- Розділ 1: Імпорти ---
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -7,6 +6,9 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+
+# Імпортуємо наші нові функції
+from prompt_logic import build_social_prompt, call_llm
 
 # --- Розділ 2: Конфігурація та ініціалізація ---
 load_dotenv()
@@ -35,7 +37,6 @@ WIZARD_STEPS = [
   { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
 ]
 
-# Створюємо клас для станів нашого візарда
 class Form(StatesGroup):
     in_wizard = State()
 
@@ -54,7 +55,6 @@ async def ask_question(message: types.Message, state: FSMContext):
     
     if step['type'] == 'choice':
         buttons = [InlineKeyboardButton(text=option, callback_data=f"select:{step['key']}:{option}") for option in step['options']]
-        # Розбиваємо кнопки по 2 в ряд для кращого вигляду
         keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
     else: # type 'text'
         keyboard.append([InlineKeyboardButton(text="⏩ Пропустити", callback_data="skip_step")])
@@ -66,7 +66,7 @@ async def ask_question(message: types.Message, state: FSMContext):
 async def finish_wizard(message: types.Message, state: FSMContext):
     """Завершує візард, показує звіт та запускає генерацію."""
     data = await state.get_data()
-    await state.clear() # Очищуємо стан (пам'ять)
+    await state.clear()
 
     summary = "*Дякую! Ви заповнили всі дані:*\n\n"
     for step in WIZARD_STEPS:
@@ -76,19 +76,18 @@ async def finish_wizard(message: types.Message, state: FSMContext):
     await message.answer(summary)
     await message.answer("⏳ *Генерую допис...* Будь ласка, зачекайте. Це може зайняти до хвилини.", reply_markup=ReplyKeyboardRemove())
 
-    # TODO: На наступному кроці ми зробимо цей блок асинхронним
-    # --- СИНХРОННА ГЕНЕРАЦІЯ ---
+    # --- ІНТЕГРАЦІЯ РЕАЛЬНОЇ ГЕНЕРАЦІЇ ---
     try:
-        # Тут має бути ваша логіка виклику AI, як у GAS
-        # Наприклад, buildSocialPrompt_(form) та callLLM_(prompt)
-        # Поки що використовуємо заглушку:
-        result = f"## ✅ Ваш допис готовий:\n\nТут буде текст, згенерований на основі ваших відповідей для платформи {data.get('platform', 'не вказано')}."
+        # 1. Будуємо промпт на основі зібраних даних
+        system_prompt, user_prompt = build_social_prompt(data)
+        # 2. Викликаємо мовну модель
+        result = call_llm(system_prompt, user_prompt)
+        # 3. Надсилаємо результат
         await message.answer(result)
     except Exception as e:
         await message.answer(f"❌ Під час генерації сталася помилка: {e}")
 
 # --- Розділ 5: Обробники команд та дій ---
-# Хендлер для команд /start та /newpost
 @dp.message(CommandStart())
 @dp.message(Command("newpost"))
 async def command_start_handler(message: types.Message, state: FSMContext):
@@ -99,7 +98,6 @@ async def command_start_handler(message: types.Message, state: FSMContext):
     await message.answer("👋 Вітаю! Давайте створимо допис. Я буду ставити питання крок за кроком.")
     await ask_question(message, state)
 
-# Хендлер для команди /cancel
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
     """Дозволяє користувачу скасувати дію в будь-який момент."""
@@ -109,7 +107,6 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Дію скасовано.", reply_markup=ReplyKeyboardRemove())
 
-# Хендлер для текстових відповідей під час візарда
 @dp.message(Form.in_wizard, F.text)
 async def process_text_answer(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -123,7 +120,6 @@ async def process_text_answer(message: types.Message, state: FSMContext):
     else:
         await message.answer("Будь ласка, оберіть один з варіантів за допомогою кнопок.")
 
-# Хендлер для кнопок
 @dp.callback_query(Form.in_wizard)
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -152,8 +148,7 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
     
     await call.answer()
 
-
-# --- Розділ 6: Налаштування вебхука (без змін) ---
+# --- Розділ 6: Налаштування вебхука ---
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(update: dict):
     telegram_update = types.Update(**update)
