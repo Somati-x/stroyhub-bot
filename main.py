@@ -191,3 +191,6 @@ async def send_main_menu(message: types.Message):
 # @dp.message()
 # async def echo_handler(message: types.Message):
 #     await send_main_menu(message)
+
+
+
