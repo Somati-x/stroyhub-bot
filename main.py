@@ -124,41 +124,60 @@ async def process_text_answer(message: types.Message, state: FSMContext):
 # ↓↓↓ ОСНОВНІ ЗМІНИ ТУТ ↓↓↓
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
-    # Намагаємось відповісти на клік, але ігноруємо помилку, якщо він застарів
     try:
         await call.answer()
     except Exception:
-        pass # Просто ігноруємо помилку "query is too old"
+        pass
     
     current_state = await state.get_state()
     
-    # Решта логіки залишається без змін
     if current_state == Form.in_wizard:
         data = await state.get_data()
         current_step_index = data.get("current_step_index", 0)
+        
+        # Обгортаємо кожну дію з повідомленням у try-except
         if call.data == "skip_step":
-            await call.message.delete()
+            try:
+                await call.message.delete()
+            except Exception:
+                pass
             await state.update_data({"current_step_index": current_step_index + 1})
             await ask_question(call.message, state)
+            
         elif call.data.startswith("select:"):
-            parts = call.data.split(':')
-            key, value = parts[1], parts[2]
+            try:
+                # Редагуємо повідомлення, щоб показати вибір, а не видаляти
+                parts = call.data.split(':')
+                key, value = parts[1], parts[2]
+                updated_text = f"{WIZARD_STEPS[current_step_index]['question']}\n\n*✅ Ваш вибір: {value}*"
+                await call.message.edit_text(updated_text)
+            except Exception:
+                pass # Ігноруємо помилку, якщо повідомлення вже змінено/видалено
+            
+            # Оновлюємо стан
             await state.update_data({key: value})
             await state.update_data({"current_step_index": current_step_index + 1})
-            await call.message.delete()
+            
+            # Задаємо наступне питання через невелику паузу
+            Utilities.sleep(1000)
             await ask_question(call.message, state)
 
-    if call.data == "regenerate":
-        await call.message.delete()
-        await finish_wizard(call.message, state, is_regenerate=True)
-    elif call.data == "finish_generation":
-        await state.clear()
-        await call.message.edit_text("✅ Дякую за використання бота!")
-        await send_main_menu(call.message)
-    elif call.data == "cancel_wizard":
-        await state.clear()
-        await call.message.edit_text("❌ Створення допису скасовано.")
-        await send_main_menu(call.message)
+    # Обробка фінальних кнопок
+    try:
+        if call.data == "regenerate":
+            await call.message.delete()
+            await finish_wizard(call.message, state, is_regenerate=True)
+        elif call.data == "finish_generation":
+            await state.clear()
+            await call.message.edit_text("✅ Дякую за використання бота!")
+            await send_main_menu(call.message)
+        elif call.data == "cancel_wizard":
+            await state.clear()
+            await call.message.edit_text("❌ Створення допису скасовано.")
+            await send_main_menu(call.message)
+    except Exception:
+        pass
+
 
 # --- Розділ 6: Налаштування вебхука ---
 @app.post(WEBHOOK_PATH)
