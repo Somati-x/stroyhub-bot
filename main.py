@@ -1,6 +1,7 @@
 # --- Розділ 1: Імпорти ---
 import os
 import re
+import time # <-- ДОДАНО НОВИЙ ІМПОРТ
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
@@ -121,7 +122,6 @@ async def process_text_answer(message: types.Message, state: FSMContext):
     else:
         await message.answer("Будь ласка, оберіть один з варіантів за допомогою кнопок.")
 
-# ↓↓↓ ОСНОВНІ ЗМІНИ ТУТ ↓↓↓
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
     try:
@@ -135,34 +135,29 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
         current_step_index = data.get("current_step_index", 0)
         
-        # Обгортаємо кожну дію з повідомленням у try-except
         if call.data == "skip_step":
             try:
                 await call.message.delete()
-            except Exception:
-                pass
+            except Exception: pass
             await state.update_data({"current_step_index": current_step_index + 1})
             await ask_question(call.message, state)
             
         elif call.data.startswith("select:"):
             try:
-                # Редагуємо повідомлення, щоб показати вибір, а не видаляти
                 parts = call.data.split(':')
                 key, value = parts[1], parts[2]
                 updated_text = f"{WIZARD_STEPS[current_step_index]['question']}\n\n*✅ Ваш вибір: {value}*"
                 await call.message.edit_text(updated_text)
-            except Exception:
-                pass # Ігноруємо помилку, якщо повідомлення вже змінено/видалено
-            
-            # Оновлюємо стан
-            await state.update_data({key: value})
-            await state.update_data({"current_step_index": current_step_index + 1})
-            
-            # Задаємо наступне питання через невелику паузу
-            Utilities.sleep(1000)
-            await ask_question(call.message, state)
+                
+                await state.update_data({key: value})
+                await state.update_data({"current_step_index": current_step_index + 1})
+                
+                # <-- ВИПРАВЛЕННЯ ТУТ
+                time.sleep(1) # Використовуємо time.sleep(1) для паузи в 1 секунду
+                
+                await ask_question(call.message, state)
+            except Exception: pass
 
-    # Обробка фінальних кнопок
     try:
         if call.data == "regenerate":
             await call.message.delete()
@@ -177,7 +172,6 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
             await send_main_menu(call.message)
     except Exception:
         pass
-
 
 # --- Розділ 6: Налаштування вебхука ---
 @app.post(WEBHOOK_PATH)
