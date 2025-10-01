@@ -33,7 +33,6 @@ def build_social_prompt(form_data: dict) -> tuple:
     complex_name = form_data.get('complexName', '')
     area = form_data.get('area', '')
     rooms = form_data.get('rooms', '')
-    style = form_data.get('style', '')
     object_status = form_data.get('objectStatus', '')
     features = form_data.get('features', '')
     
@@ -60,9 +59,6 @@ def build_social_prompt(form_data: dict) -> tuple:
     
     # Додаткові деталі
     additional_info = []
-    if style and style != '_пропущено_':
-        additional_info.append(f"Стиль ремонту: {style}")
-    
     if object_status and object_status != '_пропущено_':
         additional_info.append(f"Статус: {object_status}")
     
