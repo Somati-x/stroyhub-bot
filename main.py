@@ -19,6 +19,7 @@ from prompt_logic import build_social_prompt, call_llm
 # --- Розділ 2: Конфігурація та ініціалізація ---
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
 BASE_WEBHOOK_URL = "https://stroyhub-bot.onrender.com"
 WEBHOOK_PATH = "/webhook"
 
@@ -42,7 +43,6 @@ WIZARD_STEPS = [
   { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Крок 12/13: Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
   { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
 ]
-
 MAIN_BUTTON_TEXT = "📝 Написати новий допис"
 
 class Form(StatesGroup):
@@ -52,22 +52,17 @@ class Form(StatesGroup):
 async def ask_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_step_index = data.get("current_step_index", 0)
-
     if current_step_index >= len(WIZARD_STEPS):
         await finish_wizard(message, state, is_regenerate=False)
         return
-
     step = WIZARD_STEPS[current_step_index]
     keyboard = []
-    
     if step['type'] == 'choice':
         buttons = [InlineKeyboardButton(text=option, callback_data=f"select:{step['key']}:{option}") for option in step['options']]
         keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
     else:
         keyboard.append([InlineKeyboardButton(text="⏩ Пропустити", callback_data="skip_step")])
-    
     keyboard.append([InlineKeyboardButton(text="❌ Скасувати", callback_data="cancel_wizard")])
-    
     await message.answer(step['question'], reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
 async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate: bool = False):
@@ -78,20 +73,17 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
             answer = data.get(step['key'], "_пропущено_")
             summary += f"*{step['label']}:* {answer}\n"
         await message.answer(summary)
-    
     await message.answer("⏳ *Генерую допис...*", reply_markup=ReplyKeyboardRemove())
     try:
         system_prompt, user_prompt = build_social_prompt(data)
         result_string = call_llm(system_prompt, user_prompt)
         posts = re.split(r'## Варіант \d+', result_string)
         posts = [post.strip() for post in posts if post.strip()]
-
         if not posts:
-            await message.answer("Не вдалося розпізнати варіанти у відповіді від AI.\n\n" + result_string)
+            await message.answer("Не вдалося розпізнати варіанти.\n\n" + result_string)
         else:
             for i, post in enumerate(posts):
                 await message.answer(f"## Варіант {i+1}\n\n{post}")
-        
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 Згенерувати знову", callback_data="regenerate"), InlineKeyboardButton(text="✅ Закінчити", callback_data="finish_generation")]])
         await message.answer("Що робимо далі?", reply_markup=final_keyboard)
     except Exception as e:
@@ -102,7 +94,6 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
 # --- Розділ 5: Обробники команд та дій ---
 @dp.message(F.text.in_({"/start", "/newpost", MAIN_BUTTON_TEXT}))
 async def command_start_handler(message: types.Message, state: FSMContext):
-    """Починає діалог та запускає візард."""
     await state.clear()
     await state.set_data({"current_step_index": 0})
     await state.set_state(Form.in_wizard)
@@ -111,7 +102,6 @@ async def command_start_handler(message: types.Message, state: FSMContext):
 
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
-    """Дозволяє користувачу скасувати дію в будь-який момент."""
     current_state = await state.get_state()
     if current_state is None:
         return
@@ -131,11 +121,18 @@ async def process_text_answer(message: types.Message, state: FSMContext):
     else:
         await message.answer("Будь ласка, оберіть один з варіантів за допомогою кнопок.")
 
+# ↓↓↓ ОСНОВНІ ЗМІНИ ТУТ ↓↓↓
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
-    await call.answer()
+    # Намагаємось відповісти на клік, але ігноруємо помилку, якщо він застарів
+    try:
+        await call.answer()
+    except Exception:
+        pass # Просто ігноруємо помилку "query is too old"
+    
     current_state = await state.get_state()
     
+    # Решта логіки залишається без змін
     if current_state == Form.in_wizard:
         data = await state.get_data()
         current_step_index = data.get("current_step_index", 0)
@@ -173,6 +170,11 @@ async def bot_webhook(update: dict):
 async def on_startup():
     webhook_url = BASE_WEBHOOK_URL + WEBHOOK_PATH
     await bot.set_webhook(url=webhook_url)
+    if ADMIN_ID:
+        try:
+            await bot.send_message(ADMIN_ID, "✅ Бот успішно перезапущено! Нова версія онлайн.")
+        except Exception as e:
+            print(f"Failed to send startup message to admin: {e}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -180,17 +182,5 @@ async def on_shutdown():
 
 # --- Розділ 7: Головне меню ---
 async def send_main_menu(message: types.Message):
-    """Надсилає головне меню з постійною кнопкою внизу."""
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=MAIN_BUTTON_TEXT)]],
-        resize_keyboard=True
-    )
+    keyboard = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=MAIN_BUTTON_TEXT)]], resize_keyboard=True)
     await message.answer("Щоб створити новий допис, натисніть кнопку внизу або введіть /newpost.", reply_markup=keyboard)
-
-# --- ВИДАЛЕНО КОНФЛІКТНИЙ ОБРОБНИК ---
-# @dp.message()
-# async def echo_handler(message: types.Message):
-#     await send_main_menu(message)
-
-
-
