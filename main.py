@@ -4,6 +4,8 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
+import uvicorn
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -19,11 +21,10 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
-# Render автоматично підставляє RENDER_EXTERNAL_URL у середовищі
 BASE_WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "https://stroyhub-bot.onrender.com")
 WEBHOOK_PATH = "/webhook"
 
-# Логування для дебагу
+# Логування
 logging.basicConfig(level=logging.INFO)
 
 # --- FastAPI + Aiogram ---
@@ -37,21 +38,21 @@ from prompt_logic import build_social_prompt, call_llm
 # --- Константи ---
 MAIN_BUTTON_TEXT = "📝 Написати новий допис"
 
-# --- Виправлена структура WIZARD_STEPS ---
+# --- Кроки ---
 WIZARD_STEPS = [
-  { 'key': 'features',     'type': 'text',   'label': 'Ключові особливості', 'question': "Крок 1/13: Введіть ключові особливості та 'фішки' проєкту." },
-  { 'key': 'platform',     'type': 'choice', 'label': 'Платформа',          'question': "Крок 2/13: Оберіть платформу.", 'options': ['Instagram', 'Facebook'] },
-  { 'key': 'objectStatus', 'type': 'choice', 'label': 'Статус об\'єкта',     'question': "Крок 3/13: Оберіть статус об'єкта.", 'options': ['Об\'єкт зданий', 'Робота в процесі'] },
-  { 'key': 'street',       'type': 'text',   'label': 'Вулиця',             'question': "Крок 4/13: Вкажіть вулицю (можна пропустити)." },
-  { 'key': 'district',     'type': 'text',   'label': 'Район',              'question': "Крок 5/13: Вкажіть район (напр: Аркадія)." },
-  { 'key': 'style',        'type': 'text',   'label': 'Стиль ремонту',      'question': "Крок 6/13: Опишіть стиль ремонту." },
-  { 'key': 'propertyType', 'type': 'choice', 'label': 'Тип нерухомості',    'question': "Крок 7/13: Оберіть тип нерухомості.", 'options': ['Квартира', 'Апартаменти', 'Будинок', 'Комерційне приміщення'] },
-  { 'key': 'complexName',  'type': 'text',   'label': 'Назва ЖК',           'question': "Крок 8/13: Вкажіть назву ЖК (можна пропустити)." },
-  { 'key': 'area',         'type': 'text',   'label': 'Площа, м²',          'question': "Крок 9/13: Яка площа об'єкта в м²?" },
-  { 'key': 'rooms',        'type': 'choice', 'label': 'К-ть кімнат',        'question': "Крок 10/13: Оберіть кількість кімнат.", 'options': ['1', '2', '3', '4+', 'Студія'] },
-  { 'key': 'goal',         'type': 'choice', 'label': 'Мета тексту',        'question': "Крок 11/13: Оберіть головну мету тексту.", 'options': ['Продемонструвати якість та деталі', 'Показати експертність', 'Створити емоційний зв\'язок', 'Залучити на консультацію', 'Розповісти історію \"до/після\"'] },
-  { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Крок 12/13: Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
-  { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
+    { 'key': 'features',     'type': 'text',   'label': 'Ключові особливості', 'question': "Крок 1/13: Введіть ключові особливості та 'фішки' проєкту." },
+    { 'key': 'platform',     'type': 'choice', 'label': 'Платформа', 'question': "Крок 2/13: Оберіть платформу.", 'options': ['Instagram', 'Facebook'] },
+    { 'key': 'objectStatus', 'type': 'choice', 'label': 'Статус об\'єкта', 'question': "Крок 3/13: Оберіть статус об'єкта.", 'options': ['Об\'єкт зданий', 'Робота в процесі'] },
+    { 'key': 'street',       'type': 'text',   'label': 'Вулиця', 'question': "Крок 4/13: Вкажіть вулицю (можна пропустити)." },
+    { 'key': 'district',     'type': 'text',   'label': 'Район', 'question': "Крок 5/13: Вкажіть район (напр: Аркадія)." },
+    { 'key': 'style',        'type': 'text',   'label': 'Стиль ремонту', 'question': "Крок 6/13: Опишіть стиль ремонту." },
+    { 'key': 'propertyType', 'type': 'choice', 'label': 'Тип нерухомості', 'question': "Крок 7/13: Оберіть тип нерухомості.", 'options': ['Квартира', 'Апартаменти', 'Будинок', 'Комерційне приміщення'] },
+    { 'key': 'complexName',  'type': 'text',   'label': 'Назва ЖК', 'question': "Крок 8/13: Вкажіть назву ЖК (можна пропустити)." },
+    { 'key': 'area',         'type': 'text',   'label': 'Площа, м²', 'question': "Крок 9/13: Яка площа об'єкта в м²?" },
+    { 'key': 'rooms',        'type': 'choice', 'label': 'К-ть кімнат', 'question': "Крок 10/13: Оберіть кількість кімнат.", 'options': ['1', '2', '3', '4+', 'Студія'] },
+    { 'key': 'goal',         'type': 'choice', 'label': 'Мета тексту', 'question': "Крок 11/13: Оберіть головну мету тексту.", 'options': ['Продемонструвати якість та деталі', 'Показати експертність', 'Створити емоційний зв\'язок', 'Залучити на консультацію', 'Розповісти історію \"до/після\"'] },
+    { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Крок 12/13: Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
+    { 'key': 'language',     'type': 'choice', 'label': 'Мова', 'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
 ]
 
 # --- FSM ---
@@ -131,8 +132,7 @@ async def command_start_handler(message: types.Message, state: FSMContext):
 
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is None:
+    if await state.get_state() is None:
         return
     await state.clear()
     await message.answer("Дію скасовано.")
@@ -157,9 +157,7 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
     except Exception:
         pass
     
-    current_state = await state.get_state()
-    
-    if current_state == Form.in_wizard:
+    if await state.get_state() == Form.in_wizard:
         data = await state.get_data()
         current_step_index = data.get("current_step_index", 0)
         try:
@@ -194,10 +192,15 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
     except Exception:
         pass
 
+# --- Health-check ---
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
 # --- Webhook ---
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(update: dict):
-    if "update_id" not in update:  # захист від health checks
+    if "update_id" not in update:  # щоб health-check не заважав
         return {"status": "ignored"}
     telegram_update = types.Update(**update)
     await dp.feed_update(bot=bot, update=telegram_update)
@@ -210,10 +213,15 @@ async def on_startup():
     await bot.set_webhook(url=webhook_url)
     if ADMIN_ID:
         try:
-            await bot.send_message(ADMIN_ID, f"✅ Бот успішно перезапущено!\nWebhook: {webhook_url}")
+            await bot.send_message(ADMIN_ID, f"✅ Бот перезапущено!\nWebhook: {webhook_url}")
         except Exception as e:
-            logging.error(f"Failed to send startup message to admin: {e}")
+            logging.error(f"Не вдалося надіслати повідомлення адміну: {e}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await bot.delete_webhook()
+
+# --- Запуск uvicorn ---
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
