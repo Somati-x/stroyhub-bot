@@ -5,7 +5,7 @@ from textwrap import dedent
 
 # --- Конфігурація ---
 GPT_MODEL = "gpt-4.1"
-MAX_TOKENS = 4000
+MAX_TOKENS = 7000
 TEMPERATURE = 0.7
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # секунди
