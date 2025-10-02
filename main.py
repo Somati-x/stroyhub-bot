@@ -100,14 +100,15 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
     try:
         system_prompt, user_prompt = build_social_prompt(data)
         result_string = await call_llm(system_prompt, user_prompt)
-        
-        posts = re.split(r'## Варіант \d+', result_string)
+
+        pattern = r'(## Варіант \d+.*?)(?=\n## Варіант \d+|\Z)'
+        posts = re.findall(pattern, result_string, flags=re.S)
         posts = [post.strip() for post in posts if post.strip()]
         if not posts:
             await message.answer("Не вдалося розпізнати варіанти.\n\n" + result_string)
         else:
-            for i, post in enumerate(posts):
-                await message.answer(f"## Варіант {i+1}\n\n{post}")
+            for post in posts:
+                await message.answer(post)
         
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Згенерувати знову", callback_data="regenerate"),
