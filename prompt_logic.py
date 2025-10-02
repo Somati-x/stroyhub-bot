@@ -3,7 +3,7 @@ import httpx # Використовуємо httpx замість requests
 import asyncio
 
 # --- Конфігурація ---
-GPT_MODEL = "gpt-4o"
+GPT_MODEL = "gpt-4.1"
 MAX_TOKENS = 4000
 TEMPERATURE = 0.7
 MAX_RETRIES = 3
@@ -17,9 +17,7 @@ def build_social_prompt(form_data: dict) -> tuple:
     social_network = form_data.get('platform', 'Instagram')
     post_type = form_data.get('goal', 'Продемонструвати якість та деталі')
     variations = form_data.get('variations', '1')
-    language_map = {'Українська': 'українська', 'Русский': 'русский'}
-    language = language_map.get(form_data.get('language', 'Українська'), 'українська')
-    
+
     topic_parts = [f"Допис про {form_data.get('propertyType', 'нерухомість')}"]
     rooms = form_data.get('rooms')
     if rooms and rooms != '_пропущено_': topic_parts.append(f"({rooms})" if rooms in ['Студія', '4+'] else f"({rooms} кімнат)")
@@ -28,11 +26,35 @@ def build_social_prompt(form_data: dict) -> tuple:
     district = form_data.get('district')
     if district and district != '_пропущено_': topic_parts.append(f"в районі {district}")
     topic = " ".join(topic_parts) + "."
+
+    features = form_data.get('features')
+    street = form_data.get('street')
+    complex_name = form_data.get('complexName')
+    object_status = form_data.get('objectStatus')
+
+    details = []
+    if features and features != '_пропущено_':
+        details.append(f"Ключові особливості: {features}.")
+    if object_status and object_status != '_пропущено_':
+        details.append(f"Статус об'єкта: {object_status}.")
+    if complex_name and complex_name != '_пропущено_':
+        details.append(f"ЖК: {complex_name}.")
+    if street and street != '_пропущено_':
+        details.append(f"Вулиця: {street}.")
+
+    details_text = " ".join(details) if details else ""
     
     # ... (решта логіки побудови промпту без змін) ...
     system_prompt = 'Ти — SMM-стратег...' # (для скорочення, тут ваш повний системний промпт)
     
-    user_prompt_parts = [f"Згенеруй текст для допису в {social_network} на тему: {topic}", f"Мета: {post_type}", f"Кількість варіантів: {variations}", f"Мова: {language}"]
+    user_prompt_parts = [
+        f"Згенеруй текст для допису в {social_network} на тему: {topic}",
+        f"Мета: {post_type}",
+        f"Кількість варіантів: {variations}",
+        "Мова: українська",
+    ]
+    if details_text:
+        user_prompt_parts.append(details_text)
     user_prompt = "\n".join(user_prompt_parts)
 
     return (system_prompt, user_prompt)
