@@ -37,6 +37,7 @@ from prompt_logic import build_social_prompt, call_llm
 
 # --- Константи ---
 MAIN_BUTTON_TEXT = "📝 Написати новий допис"
+CANCEL_WIZARD_BUTTON_TEXT = "скасувати створення допису"
 
 # --- Кроки ---
 WIZARD_STEPS = [
@@ -50,12 +51,13 @@ WIZARD_STEPS = [
     { 'key': 'area',         'type': 'text',   'label': 'Площа, м²', 'question': "Яка площа об'єкта в м²?" },
     { 'key': 'rooms',        'type': 'choice', 'label': 'К-ть кімнат', 'question': "Оберіть кількість кімнат.", 'options': ['1', '2', '3', '4+', 'Студія'] },
     { 'key': 'goal',         'type': 'choice', 'label': 'Мета тексту', 'question': "Оберіть головну мету тексту.", 'options': ['Продемонструвати якість та деталі', 'Показати експертність', 'Створити емоційний зв\'язок', 'Залучити на консультацію', 'Розповісти історію \"до/після\"'] },
-    { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
+    { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів допису', 'question': "Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
 ]
 
 # --- FSM ---
 class Form(StatesGroup):
     in_wizard = State()
+    confirm_generation = State()
 
 # --- Допоміжні функції ---
 async def send_main_menu(message: types.Message):
@@ -64,15 +66,23 @@ async def send_main_menu(message: types.Message):
         resize_keyboard=True
     )
     await message.answer(
-        "Щоб створити новий допис, натисніть кнопку внизу або введіть /newpost.",
+        "Щоб створити новий допис, натисніть кнопку внизу",
         reply_markup=keyboard
+    )
+
+
+def wizard_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CANCEL_WIZARD_BUTTON_TEXT)]],
+        resize_keyboard=True
     )
 
 async def ask_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_step_index = data.get("current_step_index", 0)
     if current_step_index >= len(WIZARD_STEPS):
-        await finish_wizard(message, state, is_regenerate=False)
+        await state.set_state(Form.confirm_generation)
+        await show_summary(message, state)
         return
     step = WIZARD_STEPS[current_step_index]
     keyboard = []
@@ -84,18 +94,26 @@ async def ask_question(message: types.Message, state: FSMContext):
         keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
     else:
         keyboard.append([InlineKeyboardButton(text="⏩ Пропустити", callback_data="skip_step")])
-    keyboard.append([InlineKeyboardButton(text="❌ Скасувати", callback_data="cancel_wizard")])
     await message.answer(step['question'], reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
-async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate: bool = False):
+async def show_summary(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    if not is_regenerate:
-        summary = "*Дякую! Ви заповнили всі дані:*\n\n"
-        for step in WIZARD_STEPS:
-            answer = data.get(step['key'], "_пропущено_")
-            summary += f"*{step['label']}:* {answer}\n"
-        await message.answer(summary)
-    
+    summary_lines = ["Дякую! Ви заповнили всі дані:", ""]
+    for step in WIZARD_STEPS:
+        answer = data.get(step['key'], "пропущено")
+        summary_lines.append(f"{step['label']}: {answer}")
+        summary_lines.append("")
+    summary_text = "\n".join(summary_lines).strip()
+    await message.answer(summary_text, parse_mode=None)
+    confirm_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Згенерувати допис", callback_data="confirm_generation")]]
+    )
+    await message.answer("Перевірте введені дані", reply_markup=confirm_keyboard)
+
+
+async def generate_posts(message: types.Message, state: FSMContext, is_regenerate: bool = False):
+    data = await state.get_data()
+    await state.set_state(Form.confirm_generation)
     await message.answer("⏳ *Генерую допис...*", reply_markup=ReplyKeyboardRemove())
     try:
         system_prompt, user_prompt = build_social_prompt(data)
@@ -130,8 +148,16 @@ async def command_start_handler(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_data({"current_step_index": 0})
     await state.set_state(Form.in_wizard)
-    await message.answer("👋 Вітаю! Давайте створимо допис.", reply_markup=ReplyKeyboardRemove())
+    await message.answer("👋 Вітаю! Давайте створимо допис.", reply_markup=wizard_keyboard())
     await ask_question(message, state)
+
+@dp.message(F.text.lower() == CANCEL_WIZARD_BUTTON_TEXT.lower())
+async def cancel_wizard_via_button(message: types.Message, state: FSMContext):
+    if await state.get_state() not in {Form.in_wizard, Form.confirm_generation}:
+        return
+    await state.clear()
+    await message.answer("❌ Створення допису скасовано.", reply_markup=ReplyKeyboardRemove())
+    await send_main_menu(message)
 
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
@@ -152,6 +178,11 @@ async def process_text_answer(message: types.Message, state: FSMContext):
         await ask_question(message, state)
     else:
         await message.answer("Будь ласка, оберіть один з варіантів за допомогою кнопок.")
+
+
+@dp.message(Form.confirm_generation, F.text)
+async def process_confirmation_text(message: types.Message):
+    await message.answer("Натисніть кнопку \"Згенерувати допис\" або скористайтеся кнопкою скасування нижче.")
 
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
@@ -198,9 +229,12 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
             pass
 
     try:
-        if call.data == "regenerate":
+        if call.data == "confirm_generation":
+            await call.message.edit_reply_markup()
+            await generate_posts(call.message, state)
+        elif call.data == "regenerate":
             await call.message.delete()
-            await finish_wizard(call.message, state, is_regenerate=True)
+            await generate_posts(call.message, state, is_regenerate=True)
         elif call.data == "finish_generation":
             await state.clear()
             await call.message.edit_text("✅ Дякую за використання бота!")
