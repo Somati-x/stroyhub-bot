@@ -101,6 +101,21 @@ def wizard_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
+def build_choice_keyboard(options, step_key: str):
+    buttons = [
+        InlineKeyboardButton(
+            text=format_button_label(option, CHOICE_BUTTON_ICON),
+            callback_data=f"select:{step_key}:{idx}"
+        )
+        for idx, option in enumerate(options)
+    ]
+
+    max_label_length = max((len(button.text) for button in buttons), default=0)
+    row_size = 1 if max_label_length > 22 else 2
+
+    return [buttons[i:i + row_size] for i in range(0, len(buttons), row_size)]
+
+
 async def ask_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_step_index = data.get("current_step_index", 0)
@@ -109,18 +124,10 @@ async def ask_question(message: types.Message, state: FSMContext):
         await show_summary(message, state)
         return
     step = WIZARD_STEPS[current_step_index]
-    keyboard = []
     if step['type'] == 'choice':
-        buttons = [
-            InlineKeyboardButton(
-                text=format_button_label(option, CHOICE_BUTTON_ICON),
-                callback_data=f"select:{step['key']}:{idx}"
-            )
-            for idx, option in enumerate(step['options'])
-        ]
-        keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
+        keyboard = build_choice_keyboard(step['options'], step['key'])
     else:
-        keyboard.append([InlineKeyboardButton(text=SKIP_STEP_BUTTON_TEXT, callback_data="skip_step")])
+        keyboard = [[InlineKeyboardButton(text=SKIP_STEP_BUTTON_TEXT, callback_data="skip_step")]]
     await message.answer(step['question'], reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
 async def show_summary(message: types.Message, state: FSMContext):
