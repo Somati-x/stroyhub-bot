@@ -32,12 +32,33 @@ app = FastAPI()
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp = Dispatcher()
 
+
+def format_button_label(text: str, icon: str) -> str:
+    sanitized_text = text.strip()
+    if not sanitized_text:
+        return icon
+
+    chars = list(sanitized_text)
+    for idx, char in enumerate(chars):
+        if char.isalpha():
+            chars[idx] = char.upper()
+            break
+
+    return f"{icon} {''.join(chars)}"
+
 # --- Імпорт власної логіки ---
 from prompt_logic import build_social_prompt, call_llm
 
 # --- Константи ---
-MAIN_BUTTON_TEXT = "📝 Написати новий допис"
-CANCEL_WIZARD_BUTTON_TEXT = "скасувати створення допису"
+MAIN_BUTTON_TEXT = format_button_label("Написати новий допис", "📝")
+CANCEL_WIZARD_BUTTON_TEXT = format_button_label("Скасувати створення допису", "❌")
+SKIP_STEP_BUTTON_TEXT = format_button_label("Пропустити", "⏩")
+CONFIRM_GENERATION_BUTTON_TEXT = format_button_label("Згенерувати допис", "✅")
+REGENERATE_BUTTON_TEXT = format_button_label("Згенерувати знову", "🔄")
+FINISH_BUTTON_TEXT = format_button_label("Закінчити", "✅")
+ERROR_RETRY_BUTTON_TEXT = format_button_label("Спробувати знову", "🔄")
+ERROR_FINISH_BUTTON_TEXT = format_button_label("Закінчити", "❌")
+CHOICE_BUTTON_ICON = "🔹"
 
 # --- Кроки ---
 WIZARD_STEPS = [
@@ -88,12 +109,15 @@ async def ask_question(message: types.Message, state: FSMContext):
     keyboard = []
     if step['type'] == 'choice':
         buttons = [
-            InlineKeyboardButton(text=option, callback_data=f"select:{step['key']}:{idx}")
+            InlineKeyboardButton(
+                text=format_button_label(option, CHOICE_BUTTON_ICON),
+                callback_data=f"select:{step['key']}:{idx}"
+            )
             for idx, option in enumerate(step['options'])
         ]
         keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
     else:
-        keyboard.append([InlineKeyboardButton(text="⏩ Пропустити", callback_data="skip_step")])
+        keyboard.append([InlineKeyboardButton(text=SKIP_STEP_BUTTON_TEXT, callback_data="skip_step")])
     await message.answer(step['question'], reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
 async def show_summary(message: types.Message, state: FSMContext):
@@ -106,7 +130,7 @@ async def show_summary(message: types.Message, state: FSMContext):
     summary_text = "\n".join(summary_lines).strip()
     await message.answer(summary_text, parse_mode=None)
     confirm_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="Згенерувати допис", callback_data="confirm_generation")]]
+        inline_keyboard=[[InlineKeyboardButton(text=CONFIRM_GENERATION_BUTTON_TEXT, callback_data="confirm_generation")]]
     )
     await message.answer("Перевірте введені дані", reply_markup=confirm_keyboard)
 
@@ -130,15 +154,15 @@ async def generate_posts(message: types.Message, state: FSMContext, is_regenerat
                 await message.answer(post)
         
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Згенерувати знову", callback_data="regenerate"),
-             InlineKeyboardButton(text="✅ Закінчити", callback_data="finish_generation")]
+            [InlineKeyboardButton(text=REGENERATE_BUTTON_TEXT, callback_data="regenerate"),
+             InlineKeyboardButton(text=FINISH_BUTTON_TEXT, callback_data="finish_generation")]
         ])
         await message.answer("Що робимо далі?", reply_markup=final_keyboard)
     except Exception as e:
         await message.answer(f"❌ Під час генерації сталася помилка: {e}")
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Спробувати знову", callback_data="regenerate"),
-             InlineKeyboardButton(text="❌ Закінчити", callback_data="finish_generation")]
+            [InlineKeyboardButton(text=ERROR_RETRY_BUTTON_TEXT, callback_data="regenerate"),
+             InlineKeyboardButton(text=ERROR_FINISH_BUTTON_TEXT, callback_data="finish_generation")]
         ])
         await message.answer("Спробувати згенерувати ще раз?", reply_markup=final_keyboard)
 
@@ -182,7 +206,9 @@ async def process_text_answer(message: types.Message, state: FSMContext):
 
 @dp.message(Form.confirm_generation, F.text)
 async def process_confirmation_text(message: types.Message):
-    await message.answer("Натисніть кнопку \"Згенерувати допис\" або скористайтеся кнопкою скасування нижче.")
+    await message.answer(
+        f"Натисніть кнопку \"{CONFIRM_GENERATION_BUTTON_TEXT}\" або скористайтеся кнопкою скасування нижче."
+    )
 
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
