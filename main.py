@@ -1,4 +1,3 @@
-# --- Розділ 1: Імпорти ---
 import os
 import re
 import asyncio
@@ -14,10 +13,10 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 
-# Імпортуємо наші функції для AI
+# Імпортуємо оновлені асинхронні функції
 from prompt_logic import build_social_prompt, call_llm
 
-# --- Розділ 2: Конфігурація та ініціалізація ---
+# --- Конфігурація ---
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
@@ -28,27 +27,61 @@ app = FastAPI()
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp = Dispatcher()
 
-# --- Розділ 3: Налаштування візарда та станів (FSM) ---
+# --- Виправлена структура WIZARD_STEPS ---
 WIZARD_STEPS = [
   { 'key': 'features',     'type': 'text',   'label': 'Ключові особливості', 'question': "Крок 1/13: Введіть ключові особливості та 'фішки' проєкту." },
   { 'key': 'platform',     'type': 'choice', 'label': 'Платформа',          'question': "Крок 2/13: Оберіть платформу.", 'options': ['Instagram', 'Facebook'] },
   { 'key': 'objectStatus', 'type': 'choice', 'label': 'Статус об\'єкта',     'question': "Крок 3/13: Оберіть статус об'єкта.", 'options': ['Об\'єкт зданий', 'Робота в процесі'] },
   { 'key': 'street',       'type': 'text',   'label': 'Вулиця',             'question': "Крок 4/13: Вкажіть вулицю (можна пропустити)." },
-  { 'key': 'district',     'type': 'text',   'label': 'Район',              'question': "Крок 5/12: Вкажіть район (напр: Аркадія)." },
-  { 'key': 'propertyType', 'type': 'choice', 'label': 'Тип нерухомості',    'question': "Крок 6/12: Оберіть тип нерухомості.", 'options': ['Квартира', 'Апартаменти', 'Будинок', 'Комерційне приміщення'] },
-  { 'key': 'complexName',  'type': 'text',   'label': 'Назва ЖК',           'question': "Крок 7/12: Вкажіть назву ЖК (можна пропустити)." },
-  { 'key': 'area',         'type': 'text',   'label': 'Площа, м²',          'question': "Крок 8/12: Яка площа об'єкта в м²?" },
-  { 'key': 'rooms',        'type': 'choice', 'label': 'К-ть кімнат',        'question': "Крок 9/12: Оберіть кількість кімнат.", 'options': ['1', '2', '3', '4+', 'Студія'] },
-  { 'key': 'goal',         'type': 'choice', 'label': 'Мета тексту',        'question': "Крок 10/12: Оберіть головну мету тексту.", 'options': ['Продемонструвати якість та деталі', 'Показати експертність', 'Створити емоційний зв\'язок', 'Залучити на консультацію', 'Розповісти історію "до/після"'] },
-  { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Крок 11/12: Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
-  { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 12/12: Оберіть мову.", 'options': ['Українська', 'Русский'] }
+  { 'key': 'district',     'type': 'text',   'label': 'Район',              'question': "Крок 5/13: Вкажіть район (напр: Аркадія)." },
+  { 'key': 'style',        'type': 'text',   'label': 'Стиль ремонту',      'question': "Крок 6/13: Опишіть стиль ремонту." },
+  { 'key': 'propertyType', 'type': 'choice', 'label': 'Тип нерухомості',    'question': "Крок 7/13: Оберіть тип нерухомості.", 'options': ['Квартира', 'Апартаменти', 'Будинок', 'Комерційне приміщення'] },
+  { 'key': 'complexName',  'type': 'text',   'label': 'Назва ЖК',           'question': "Крок 8/13: Вкажіть назву ЖК (можна пропустити)." },
+  { 'key': 'area',         'type': 'text',   'label': 'Площа, м²',          'question': "Крок 9/13: Яка площа об'єкта в м²?" },
+  { 'key': 'rooms',        'type': 'choice', 'label': 'К-ть кімнат',        'question': "Крок 10/13: Оберіть кількість кімнат.", 'options': ['1', '2', '3', '4+', 'Студія'] },
+  { 'key': 'goal',         'type': 'choice', 'label': 'Мета тексту',        'question': "Крок 11/13: Оберіть головну мету тексту.", 'options': ['Продемонструвати якість та деталі', 'Показати експертність', 'Створити емоційний зв\'язок', 'Залучити на консультацію', 'Розповісти історію "до/після"'] },
+  { 'key': 'variations',   'type': 'choice', 'label': 'Кількість варіантів', 'question': "Крок 12/13: Скільки варіантів допису згенерувати?", 'options': ['1', '2', '3'] },
+  { 'key': 'language',     'type': 'choice', 'label': 'Мова',               'question': "Крок 13/13: Оберіть мову.", 'options': ['Українська', 'Русский'] }
 ]
 MAIN_BUTTON_TEXT = "📝 Написати новий допис"
 
 class Form(StatesGroup):
     in_wizard = State()
 
-# --- Розділ 4: Допоміжні функції ---
+async def ask_question(message: types.Message, state: FSMContext):
+    # ... (код без змін)
+async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate: bool = False):
+    data = await state.get_data()
+    if not is_regenerate:
+        summary = "*Дякую! Ви заповнили всі дані:*\n\n"
+        for step in WIZARD_STEPS:
+            summary += f"*{step['label']}:* {data.get(step['key'], '_пропущено_')}\n"
+        await message.answer(summary)
+    
+    await message.answer("⏳ *Генерую допис...*", reply_markup=ReplyKeyboardRemove())
+    
+    try:
+        system_prompt, user_prompt = build_social_prompt(data)
+        # ВИПРАВЛЕНО: Викликаємо асинхронну функцію з await
+        result_string = await call_llm(system_prompt, user_prompt)
+        
+        posts = re.split(r'## Варіант \d+', result_string)
+        posts = [post.strip() for post in posts if post.strip()]
+        
+        if not posts:
+            await message.answer("Не вдалося розпізнати варіанти.\n\n" + result_string)
+        else:
+            for i, post in enumerate(posts):
+                await message.answer(f"## Варіант {i+1}\n\n{post}")
+
+        # ... (решта логіки finish_wizard без змін) ...
+    except Exception as e:
+        await message.answer(f"❌ Під час генерації сталася помилка: {e}")
+    # ... (решта логіки finish_wizard без змін) ...
+
+# ... (решта коду main.py, включно з усіма хендлерами, залишається без змін) ...
+
+# (Для повноти, ось повний код решти файлу)
 async def ask_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_step_index = data.get("current_step_index", 0)
@@ -73,10 +106,12 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
             answer = data.get(step['key'], "_пропущено_")
             summary += f"*{step['label']}:* {answer}\n"
         await message.answer(summary)
+    
     await message.answer("⏳ *Генерую допис...*", reply_markup=ReplyKeyboardRemove())
     try:
         system_prompt, user_prompt = build_social_prompt(data)
-        result_string = call_llm(system_prompt, user_prompt)
+        result_string = await call_llm(system_prompt, user_prompt)
+        
         posts = re.split(r'## Варіант \d+', result_string)
         posts = [post.strip() for post in posts if post.strip()]
         if not posts:
@@ -84,15 +119,14 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
         else:
             for i, post in enumerate(posts):
                 await message.answer(f"## Варіант {i+1}\n\n{post}")
+        
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 Згенерувати знову", callback_data="regenerate"), InlineKeyboardButton(text="✅ Закінчити", callback_data="finish_generation")]])
         await message.answer("Що робимо далі?", reply_markup=final_keyboard)
     except Exception as e:
-        print(f"Error during generation: {e}")
         await message.answer(f"❌ Під час генерації сталася помилка: {e}")
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 Спробувати знову", callback_data="regenerate"), InlineKeyboardButton(text="❌ Закінчити", callback_data="finish_generation")]])
         await message.answer("Спробувати згенерувати ще раз?", reply_markup=final_keyboard)
 
-# --- Розділ 5: Обробники команд та дій ---
 @dp.message(F.text.in_({"/start", "/newpost", MAIN_BUTTON_TEXT}))
 async def command_start_handler(message: types.Message, state: FSMContext):
     await state.clear()
@@ -104,8 +138,7 @@ async def command_start_handler(message: types.Message, state: FSMContext):
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-    if current_state is None:
-        return
+    if current_state is None: return
     await state.clear()
     await message.answer("Дію скасовано.")
     await send_main_menu(message)
@@ -124,41 +157,29 @@ async def process_text_answer(message: types.Message, state: FSMContext):
 
 @dp.callback_query()
 async def process_callback(call: types.CallbackQuery, state: FSMContext):
-    try:
-        await call.answer()
-    except Exception as e:
-        print(f"Error answering callback: {e}")
+    try: await call.answer()
+    except Exception: pass
     
     current_state = await state.get_state()
     
     if current_state == Form.in_wizard:
         data = await state.get_data()
         current_step_index = data.get("current_step_index", 0)
-        
-        if call.data == "skip_step":
-            try:
+        try:
+            if call.data == "skip_step":
                 await call.message.delete()
-            except Exception as e:
-                print(f"Error deleting message: {e}")
-            await state.update_data({"current_step_index": current_step_index + 1})
-            await ask_question(call.message, state)
-            
-        elif call.data.startswith("select:"):
-            try:
+                await state.update_data({"current_step_index": current_step_index + 1})
+                await ask_question(call.message, state)
+            elif call.data.startswith("select:"):
                 parts = call.data.split(':')
                 key, value = parts[1], parts[2]
                 updated_text = f"{WIZARD_STEPS[current_step_index]['question']}\n\n*✅ Ваш вибір: {value}*"
                 await call.message.edit_text(updated_text)
-                
                 await state.update_data({key: value})
                 await state.update_data({"current_step_index": current_step_index + 1})
-                
-                # Асинхронна пауза перед наступним питанням
                 await asyncio.sleep(1)
-                
                 await ask_question(call.message, state)
-            except Exception as e:
-                print(f"Error processing selection: {e}")
+        except Exception: pass
 
     try:
         if call.data == "regenerate":
@@ -167,15 +188,13 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
         elif call.data == "finish_generation":
             await state.clear()
             await call.message.edit_text("✅ Дякую за використання бота!")
-            await send_main_menu_after_callback(call)
+            await send_main_menu(call.message)
         elif call.data == "cancel_wizard":
             await state.clear()
             await call.message.edit_text("❌ Створення допису скасовано.")
-            await send_main_menu_after_callback(call)
-    except Exception as e:
-        print(f"Error in final callback handler: {e}")
+            await send_main_menu(call.message)
+    except Exception: pass
 
-# --- Розділ 6: Налаштування вебхука ---
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(update: dict):
     telegram_update = types.Update(**update)
@@ -186,20 +205,13 @@ async def on_startup():
     webhook_url = BASE_WEBHOOK_URL + WEBHOOK_PATH
     await bot.set_webhook(url=webhook_url)
     if ADMIN_ID:
-        try:
-            await bot.send_message(ADMIN_ID, "✅ Бот успішно перезапущено! Нова версія онлайн.")
-        except Exception as e:
-            print(f"Failed to send startup message to admin: {e}")
+        try: await bot.send_message(ADMIN_ID, "✅ Бот успішно перезапущено! Нова версія онлайн.")
+        except Exception as e: print(f"Failed to send startup message to admin: {e}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await bot.delete_webhook()
 
-# --- Розділ 7: Головне меню ---
 async def send_main_menu(message: types.Message):
     keyboard = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=MAIN_BUTTON_TEXT)]], resize_keyboard=True)
     await message.answer("Щоб створити новий допис, натисніть кнопку внизу або введіть /newpost.", reply_markup=keyboard)
-
-async def send_main_menu_after_callback(call: types.CallbackQuery):
-    keyboard = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=MAIN_BUTTON_TEXT)]], resize_keyboard=True)
-    await bot.send_message(call.message.chat.id, "Щоб створити новий допис, натисніть кнопку внизу або введіть /newpost.", reply_markup=keyboard)
