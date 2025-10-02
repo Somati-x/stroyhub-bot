@@ -100,6 +100,7 @@ async def finish_wizard(message: types.Message, state: FSMContext, is_regenerate
     try:
         system_prompt, user_prompt = build_social_prompt(data)
         result_string = await call_llm(system_prompt, user_prompt)
+        result_string = result_string.replace("—", "-")
 
         pattern = r'(## Варіант \d+.*?)(?=\n## Варіант \d+|\Z)'
         posts = re.findall(pattern, result_string, flags=re.S)
