@@ -160,8 +160,10 @@ async def generate_posts(message: types.Message, state: FSMContext, is_regenerat
         if not posts:
             await message.answer("Не вдалося розпізнати варіанти.\n\n" + result_string)
         else:
-            for post in posts:
+            for index, post in enumerate(posts):
                 await message.answer(post)
+                if index < len(posts) - 1:
+                    await message.answer("\u00A0", parse_mode=None)
         
         final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=REGENERATE_BUTTON_TEXT, callback_data="regenerate"),
