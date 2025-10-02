@@ -79,7 +79,10 @@ async def ask_question(message: types.Message, state: FSMContext):
     step = WIZARD_STEPS[current_step_index]
     keyboard = []
     if step['type'] == 'choice':
-        buttons = [InlineKeyboardButton(text=option, callback_data=f"select:{step['key']}:{option}") for option in step['options']]
+        buttons = [
+            InlineKeyboardButton(text=option, callback_data=f"select:{step['key']}:{idx}")
+            for idx, option in enumerate(step['options'])
+        ]
         keyboard.extend([buttons[i:i + 2] for i in range(0, len(buttons), 2)])
     else:
         keyboard.append([InlineKeyboardButton(text="⏩ Пропустити", callback_data="skip_step")])
@@ -167,11 +170,28 @@ async def process_callback(call: types.CallbackQuery, state: FSMContext):
                 await ask_question(call.message, state)
             elif call.data.startswith("select:"):
                 parts = call.data.split(':')
-                key, value = parts[1], parts[2]
-                updated_text = f"{WIZARD_STEPS[current_step_index]['question']}\n\n*✅ Ваш вибір: {value}*"
+                if len(parts) != 3:
+                    return
+                key, raw_idx = parts[1], parts[2]
+
+                step_index = next(
+                    (idx for idx, s in enumerate(WIZARD_STEPS) if s['key'] == key and s.get('type') == 'choice'),
+                    None
+                )
+                if step_index is None or step_index != current_step_index:
+                    return
+                step = WIZARD_STEPS[step_index]
+
+                try:
+                    option_index = int(raw_idx)
+                    selected_value = step['options'][option_index]
+                except (ValueError, IndexError):
+                    return
+
+                updated_text = f"{step['question']}\n\n*✅ Ваш вибір: {selected_value}*"
                 await call.message.edit_text(updated_text)
-                await state.update_data({key: value})
-                await state.update_data({"current_step_index": current_step_index + 1})
+                await state.update_data({key: selected_value})
+                await state.update_data({"current_step_index": step_index + 1})
                 await asyncio.sleep(1)
                 await ask_question(call.message, state)
         except Exception:
