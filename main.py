@@ -36,7 +36,7 @@ dp = Dispatcher()
 def format_button_label(text: str, icon: str) -> str:
     sanitized_text = text.strip()
     if not sanitized_text:
-        return icon
+        return icon.strip()
 
     chars = list(sanitized_text)
     for idx, char in enumerate(chars):
@@ -44,7 +44,10 @@ def format_button_label(text: str, icon: str) -> str:
             chars[idx] = char.upper()
             break
 
-    return f"{icon} {''.join(chars)}"
+    label = ''.join(chars)
+    if icon:
+        return f"{icon} {label}"
+    return label
 
 # --- Імпорт власної логіки ---
 from prompt_logic import build_social_prompt, call_llm
@@ -58,7 +61,7 @@ REGENERATE_BUTTON_TEXT = format_button_label("Згенерувати знову"
 FINISH_BUTTON_TEXT = format_button_label("Закінчити", "✅")
 ERROR_RETRY_BUTTON_TEXT = format_button_label("Спробувати знову", "🔄")
 ERROR_FINISH_BUTTON_TEXT = format_button_label("Закінчити", "❌")
-CHOICE_BUTTON_ICON = "🔹"
+CHOICE_BUTTON_ICON = ""
 
 # --- Кроки ---
 WIZARD_STEPS = [
